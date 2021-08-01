@@ -1,0 +1,111 @@
+; -------------------------------------------------------------------
+; -------------------------------------------------------------------
+; *** retval: displays (and preserves) the kernel's RETVAL variable
+; ***
+; *** Build #
+; ***  1: Proof of concept version
+; *******************************************************************
+; *** This software is released to the public domain.		  ***
+; *** You have permission to use, modify, copy, and distribute	  ***
+; *** this software as you please.				  ***
+; *******************************************************************
+;
+; Register usage:
+;
+; System:
+;   r0   - Resesrved for DMA
+;   r1   - Reserved for interrupts
+;   r2   - Stack pointer
+;   r3   - Program counter
+;   r4   - SCALL program counter
+;   r5   - SRET program counter
+;   r6   - SCALL return address
+;   re.0 - SCALL overwrites with D
+;   re.1 - Baud rate constant
+;
+; Main program :
+;
+;   ra   - Command line pointer (on exec)
+;
+; All other registers are available for subroutines.
+;
+	include	"bios.inc"
+	include	"kernel.inc"
+;
+; ***************************************************
+; ***** Constants				*****
+; ***************************************************
+cr	equ	'M'-'@'
+lf	equ	'J'-'@'
+MIN_BLD	equ	300
+;
+; ***************************************************
+; ***** This block is the Execution header for	*****
+; ***** a stand-alone program. It begins 6	*****
+; *****bytes before the program start.		*****
+; ***************************************************
+LoadAdr	equ	2000h
+	org	LoadAdr-6	; Header starts at 01ffah
+	dw	LoadAdr
+	dw	EndRom-LoadAdr
+	dw	LoadAdr
+;
+; ***************************************************
+; ***** Code start				*****
+; ***************************************************
+	br	Start
+;
+; ***************************************************
+; ***** Program header				*****
+; ***************************************************
+	date
+Build:	dw	1		; build number
+	db	'proof of concept build',0
+;
+; ***************************************************
+; ***** Main program				*****
+; ***************************************************
+start:	
+	load	rf,K_VER	; check for minimum kernel version
+	lda	rf		; of 0.4.0
+	bnz	kernel_ok
+	lda	rf
+	smi	4
+	bnf	kernel_old
+	bnz	kernel_ok
+	lda	rf
+	bnz	kernel_ok
+	inc	rf		; build to LSB of build
+	ldn	rf
+	smi	low MIN_BLD	; check for minimum build o
+	dec	rf
+	ldn	rf
+	smbi	high MIN_BLD
+	bdf	kernel_ok
+kernel_old:
+	call	O_INMSG
+	db	'ERROR: needs kernel version 0.4.0 (build 300) or higher',cr,lf,0
+	retn
+kernel_ok:
+	load	rc,K_RETVAL
+	load	rf,buf
+	ldn	rc		; retrieve the previous program's
+	plo	rd		; return value
+	ldi	0
+	phi	rd
+	call	f_uintout	; convert to decimal ASCII number
+	ldi	cr		; add cr/lf
+	str	rf
+	inc	rf
+	ldi	lf
+	str	rf
+	inc	rf
+	ldi	0
+	str	rf
+	load	rf,buf
+	call	O_MSG		; display it
+	ldn	rc		; retrieve old RETVAL and
+	retn			; return to Elf/OS
+buf:	ds	8
+EndRom	equ	$
+	end
